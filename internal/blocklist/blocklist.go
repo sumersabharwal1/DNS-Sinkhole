@@ -6,6 +6,15 @@ type Blocklist struct {
 	entries map[string]struct{}
 }
 
+func InitializeBlocklist() *Blocklist {
+	dnsBlocklist := NewBlocklist()
+	// Add domains to the blocklist
+	dnsBlocklist.Add("example.com.")
+	dnsBlocklist.Add("malicious-site.org.")
+	dnsBlocklist.Add("phishing-site.net.")
+	return dnsBlocklist
+}
+
 func NewBlocklist() *Blocklist {
 	return &Blocklist{
 		// Initialize the entries map to store blocked domains
