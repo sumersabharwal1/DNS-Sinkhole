@@ -1,0 +1,53 @@
+package main
+
+import (
+	"log"
+
+	"github.com/miekg/dns"
+)
+
+// '.' signifies every query is handled
+func main() {
+	dns.HandleFunc(".", handleDNSRequest)
+
+	// create new DNS server with specified settings
+	server := &dns.Server{
+		Addr: ":8053",
+		Net:  "udp", // use UDP protocol (its quicker than TCP)
+	}
+
+	log.Println("Listening on :8053")
+
+	// start server
+	err := server.ListenAndServe()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+// r - client request (DNS message); w - used to write server response
+func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
+	// Question is a slice of multiple questions in the DNS message
+	for _, question := range r.Question {
+		log.Printf(
+			"Query: Name=%s, Type=%s",
+			question.Name,
+			dns.TypeToString[question.Qtype],
+		)
+	}
+	client := new(dns.Client)
+
+	response, _, err := client.Exchange(r, "1.1.1.1:53") // forward request to Cloudflare DNS server
+
+	if err != nil {
+		// return Server Failure response to client if there is an error in forwarding the request
+		response.Rcode = dns.RcodeServerFailure
+		return
+	}
+
+	// write response back to client
+	err = w.WriteMsg(response)
+	if err != nil {
+		log.Printf("Failed to write response: %v", err)
+	}
+}
