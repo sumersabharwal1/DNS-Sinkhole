@@ -39,10 +39,14 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 
 	response, _, err := client.Exchange(r, "1.1.1.1:53") // forward request to Cloudflare DNS server
 
+	// handle error if upstream DNS query fails
 	if err != nil {
+		log.Printf("Upstream DNS query failed: %v", err)
+		// create a new DNS message to indicate server failure
 		failure := new(dns.Msg)
 		failure.SetRcode(r, dns.RcodeServerFailure)
 
+		// write failure response back to client
 		err = w.WriteMsg(failure)
 		if err != nil {
 			log.Printf("Failed to write failure response: %v", err)
@@ -51,8 +55,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 	}
 
 	// write response back to client
-	err = w.WriteMsg(response)
-	if err != nil {
+	if err := w.WriteMsg(response); err != nil {
 		log.Printf("Failed to write response: %v", err)
 	}
 }
