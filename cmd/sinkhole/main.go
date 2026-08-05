@@ -4,7 +4,10 @@ import (
 	"log"
 
 	"github.com/miekg/dns"
+	upstream "github.com/sumersabharwal1/dns-sinkhole/internal/resolver"
 )
+
+var resolver = upstream.NewResolver("8.8.8.8:53")
 
 // '.' signifies every query is handled
 func main() {
@@ -35,9 +38,7 @@ func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
 			dns.TypeToString[question.Qtype],
 		)
 	}
-	client := new(dns.Client)
-
-	response, _, err := client.Exchange(r, "1.1.1.1:53") // forward request to Cloudflare DNS server
+	response, err := resolver.Resolve(r)
 
 	// handle error if upstream DNS query fails
 	if err != nil {
