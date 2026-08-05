@@ -8,30 +8,35 @@ import (
 	upstream "github.com/sumersabharwal1/dns-sinkhole/internal/resolver"
 )
 
-var resolver = upstream.NewResolver("8.8.8.8:53")
-var dnsBlocklist = blocklist.NewBlocklist()
+const (
+	defaultUpstream = "8.8.8.8:53"
+	listenAddress   = ":8053"
+)
+
+var (
+	resolver     = upstream.NewResolver(defaultUpstream)
+	dnsBlocklist = blocklist.InitializeBlocklist()
+)
 
 // '.' signifies every query is handled
 func main() {
-	dnsBlocklist.Add("example.com.")
 	dns.HandleFunc(".", handleDNSRequest)
 
 	// create new DNS server with specified settings
 	server := &dns.Server{
-		Addr: ":8053",
+		Addr: listenAddress,
 		Net:  "udp", // use UDP protocol (its quicker than TCP)
 	}
 
-	log.Println("Listening on :8053")
+	log.Printf("Listeining for DNS queries on %s", listenAddress)
 
-	// start server
 	err := server.ListenAndServe()
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func sendRcode(w dns.ResponseWriter, request *dns.Msg, rcode int) {
+func sendErrorResponse(w dns.ResponseWriter, request *dns.Msg, rcode int) {
 	response := new(dns.Msg)
 	response.SetRcode(request, rcode)
 
@@ -40,31 +45,38 @@ func sendRcode(w dns.ResponseWriter, request *dns.Msg, rcode int) {
 	}
 }
 
-// r - client request (DNS message); w - used to write server response
-func handleDNSRequest(w dns.ResponseWriter, r *dns.Msg) {
-	if len(r.Question) == 0 {
-		sendRcode(w, r, dns.RcodeServerFailure)
-		return
-	}
-
-	for _, question := range r.Question {
+func logQuestions(questions []dns.Question) {
+	for _, question := range questions {
 		log.Printf(
 			"Query: Name=%s, Type=%s",
 			question.Name,
 			dns.TypeToString[question.Qtype],
 		)
 	}
+}
 
-	if dnsBlocklist.IsBlocked(r.Question[0].Name) {
-		log.Printf("Blocked: %s", r.Question[0].Name)
-		sendRcode(w, r, dns.RcodeNameError)
+// r - client request (DNS message); w - used to write server response
+func handleDNSRequest(w dns.ResponseWriter, request *dns.Msg) {
+
+	if len(request.Question) == 0 {
+		sendErrorResponse(w, request, dns.RcodeServerFailure)
 		return
 	}
 
-	response, err := resolver.Resolve(r)
+	question := request.Question[0]
+	logQuestions(request.Question)
+
+	if dnsBlocklist.IsBlocked(question.Name) {
+		log.Printf("Blocked: %s", question.Name)
+		sendErrorResponse(w, request, dns.RcodeNameError)
+		return
+	}
+
+	response, err := resolver.Resolve(request)
+
 	if err != nil {
 		log.Printf("Upstream DNS query failed: %v", err)
-		sendRcode(w, r, dns.RcodeServerFailure)
+		sendErrorResponse(w, request, dns.RcodeServerFailure)
 		return
 	}
 
